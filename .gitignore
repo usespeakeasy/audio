@@ -131,3 +131,15 @@ examples/tutorials/_assets
 # third parties
 third_party/install/
 third_party/archives/
+
+examples/asr/emformer_rnnt/exp 
+examples/asr/emformer_rnnt/lightning_logs
+examples/asr/emformer_rnnt/checkpoints/
+examples/asr/emformer_rnnt/*.pt
+examples/asr/emformer_rnnt/wandb/
+examples/asr/emformer_rnnt/speak/*.model
+*.csv
+streaming_enc_out/*.pt
+wandb/
+*.pt
+test.bin

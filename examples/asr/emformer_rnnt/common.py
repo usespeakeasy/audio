@@ -19,7 +19,7 @@ GAIN = pow(10, 0.05 * DECIBEL)
 spectrogram_transform = torchaudio.transforms.MelSpectrogram(sample_rate=16000, n_fft=400, n_mels=80, hop_length=160)
 
 Batch = namedtuple("Batch", ["features", "feature_lengths", "targets", "target_lengths"])
-
+MAX_BATCH_SIZE = 2
 
 def piecewise_linear_log(x):
     x = x * GAIN
@@ -29,11 +29,15 @@ def piecewise_linear_log(x):
 
 
 def batch_by_token_count(idx_target_lengths, token_limit):
+    print("Batching by token count (limit: {})".format(token_limit))
     batches = []
     current_batch = []
     current_token_count = 0
+    
+    # Don't pack more than MAX_BATCH_SIZE samples into a single batch
+    # This is to avoid OOM errors
     for idx, target_length in idx_target_lengths:
-        if current_token_count + target_length > token_limit:
+        if len(current_batch) == MAX_BATCH_SIZE or current_token_count + target_length > token_limit:
             batches.append(current_batch)
             current_batch = [idx]
             current_token_count = target_length
