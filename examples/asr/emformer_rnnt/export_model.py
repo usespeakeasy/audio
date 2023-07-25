@@ -1,4 +1,5 @@
 import argparse
+from hashlib import md5
 import os
 import sys
 
@@ -107,6 +108,14 @@ def get_lightning_module(checkpoint_path: str, global_stats_path: str, sp_model_
             device="cpu",
         )
 
+# Print checksum md5 for the file
+def get_checksum(filename):
+    with open(filename, "rb") as f:
+        readable_hash = md5(
+            f.read()
+        ).hexdigest()  # Use hashlib to create md5 hash
+    return readable_hash
+
 class ModelWrapper(torch.nn.Module):
     def __init__(self, tgt_dict: List[str], global_stats_path: str, checkpoint_path: str, sp_model_path:str):
         super().__init__()
@@ -127,16 +136,34 @@ class ModelWrapper(torch.nn.Module):
         self.gain = pow(10, 0.05 * self.decibel)
 
     def forward(
-        self, input: torch.Tensor, prev_hypo: Optional[List[Hypothesis]], prev_state: Optional[List[List[torch.Tensor]]], topk: int = 10
-    ) -> Tuple[List[str], List[float], List[Hypothesis], Optional[List[List[torch.Tensor]]]]:
+        self, input: torch.Tensor, prev_state: Optional[List[List[torch.Tensor]]], prev_hypo: Optional[List[Hypothesis]]
+    ) -> Tuple[List[str], List[float], Optional[List[List[torch.Tensor]]], Optional[List[Hypothesis]]]:
         spectrogram = self.transform(input).transpose(1, 0)
         features = _piecewise_linear_log(spectrogram * self.gain).unsqueeze(0)[:, :-1]
         features = (features - self.mean) * self.invstddev
         length = torch.tensor([features.shape[1]])
-
-        hypotheses, state = self.decoder.infer(features, length, topk, state=prev_state, hypothesis=prev_hypo)
+        
+        if prev_hypo is None:
+            if prev_state is not None:
+                hypotheses, state = self.decoder.infer(features, length, beam_width=10, state=prev_state)
+            else:
+                hypotheses, state = self.decoder.infer(features, length, beam_width=10)
+        else:
+            hypotheses, state = self.decoder.infer(features, length, beam_width=10, state=prev_state, hypothesis=prev_hypo)
+        
         transcript, probs = post_process_hypos(hypotheses, self.tgt_dict)
-        return transcript, probs, hypotheses, state
+        # Remove any hypothesis that has a nan probability
+        non_nan_indices: List[int] = []
+        for i, p in enumerate(probs):
+            if not torch.tensor(p).isnan() and torch.tensor(p) > 0.1:
+                non_nan_indices.append(i)
+        hypotheses = [hypotheses[i] for i in non_nan_indices]
+        probs = [probs[i] for i in non_nan_indices]
+        transcript = [transcript[i] for i in non_nan_indices]
+
+        return transcript, probs, state, hypotheses
+        
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -158,28 +185,39 @@ def main():
                          ).eval()
     # Move model to CPU
     model = model.cpu()
+    # save model before quantization
+    before_quantized = torch.jit.script(model)
+    before_quantized.save("before_" + args.output_path)
+    model.decoder.model.predictor.qconfig = None
     
     # Quantize the model
     if args.quantize:
-        qconfig_dict = {
-                torch.nn.EmbeddingBag : float_qparams_weight_only_qconfig,
-                torch.nn.Linear: default_dynamic_qconfig,
-                # torch.nn.LSTM: default_dynamic_qconfig,
-            }
-        quantised_model = quantize_dynamic(model, qconfig_dict)
+        quantize_dynamic(model.decoder.model.transcriber, {torch.nn.Linear}, dtype=torch.qint8, inplace=True)
+        print(model)
 
-    # Script the model
+    # Script the model and optimize for mobile
     if args.quantize:
-        scripted_quantised_model = torch.jit.script(quantised_model)
-    else:
         scripted_quantised_model = torch.jit.script(model)
-    
-    # Optimize for mobile
-    optimized_model = optimize_for_mobile(scripted_quantised_model)
-    
+        scripted_quantised_model.eval()
+        optimized_model = optimize_for_mobile(scripted_quantised_model)
+        
+    else:
+        scripted_model = torch.jit.script(model)
+        scripted_model.eval()
+        optimized_model = optimize_for_mobile(scripted_model)
+        
+    # Save the model
+    optimized_model.save("quantised_scripted_vanilla" + args.output_path)
+    print("Saved model to: ", "quantised_scripted_vanilla" + args.output_path)
+    print("Size of model in MB: ", os.path.getsize("quantised_scripted_vanilla" + args.output_path) / 1e6)
+
     # Save for lite interpreter
     optimized_model._save_for_lite_interpreter(args.output_path)
+    print("Saved model to: ", args.output_path)
     print("Size of model in MB: ", os.path.getsize(args.output_path) / 1e6)
+
+    checksum = get_checksum(args.output_path)
+    print("Checksum: ", checksum)
 
 if __name__ == "__main__":
     main()

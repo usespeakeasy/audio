@@ -54,7 +54,7 @@ class SpeakRNNTModule(LightningModule):
     def __init__(
         self,
         *,
-        data_path: str,
+        data_path: dict,
         sp_model_path: str,
         global_stats_path: str,
     ):
@@ -205,15 +205,18 @@ class SpeakRNNTModule(LightningModule):
 
     def train_dataloader(self):
         print("Loading training dataset")
-        csv_files = ["/data/home/ec2-user/raw_data/csv/clean/train_2021_clean.csv", "/data/home/ec2-user/raw_data/train_ai_tutor_cleaned_04_26.csv"]
-        data_dir = ["/data/home/ec2-user/data_cache/train_2021", "/data/home/ec2-user/data_cache/train_ai_tutor_04_10"]
+        # csv_files = ["/data/home/ec2-user/raw_data/csv/clean/train_2021_clean.csv", "/data/home/ec2-user/raw_data/train_ai_tutor_cleaned_04_26.csv"]
+        # data_dir = ["/data/home/ec2-user/data_cache/train_2021", "/data/home/ec2-user/data_cache/train_ai_tutor_04_10"]
+        
+        csv_files = self.data_path["train"]["csv_files"]
+        data_dir = self.data_path["train"]["data_dir"]
         target_lengths, dataset = self.construct_dataset(csv_files, data_dir)
         dataset = CustomDataset(dataset, MAX_TOKENS_PACKED, target_lengths)
         dataloader = torch.utils.data.DataLoader(
             dataset,
             batch_size=None,
             collate_fn=self._train_collate_fn,
-            num_workers=16,
+            num_workers=8,
             shuffle=True,
             pin_memory=True,
         )
@@ -235,8 +238,11 @@ class SpeakRNNTModule(LightningModule):
 
     def val_dataloader(self):
         print("Loading validation dataset")
-        csv_files = ["/data/home/ec2-user/raw_data/csv/test_ai_tutor_04_10.csv"]
-        data_dir = ["/data/home/ec2-user/data_cache/test_ai_tutor_04_10"]
+        # csv_files = ["/data/home/ec2-user/raw_data/csv/test_ai_tutor_04_10.csv"]
+        # data_dir = ["/data/home/ec2-user/data_cache/test_ai_tutor_04_10"]
+        csv_files = self.data_path["val"]["csv_files"]
+        data_dir = self.data_path["val"]["data_dir"]
+
         target_lengths, dataset = self.construct_dataset(csv_files, data_dir)
         print("Done loading validation dataset")
         dataset = CustomDataset(dataset, MAX_TOKENS_PACKED, target_lengths)
@@ -245,7 +251,7 @@ class SpeakRNNTModule(LightningModule):
             dataset,
             batch_size=None,
             collate_fn=self._valid_collate_fn,
-            num_workers=16,
+            num_workers=8,
 
         )
         return dataloader
@@ -255,5 +261,5 @@ class SpeakRNNTModule(LightningModule):
         # TODO: Packed sequence
         print("Loading test dataset")
         _, dataset = self.construct_dataset(csv_files, data_dirs)
-        return torch.utils.data.DataLoader(dataset, batch_size=batch_size, collate_fn=self._test_collate_fn, num_workers=16, shuffle=False)
+        return torch.utils.data.DataLoader(dataset, batch_size=batch_size, collate_fn=self._test_collate_fn, num_workers=8, shuffle=False)
 

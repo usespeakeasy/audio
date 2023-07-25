@@ -32,7 +32,7 @@ CKPT_DEFAULT = "/data/home/ec2-user/audio/examples/asr/emformer_rnnt/exp/2023042
 # Extract timestamp from checkpoint path
 run_id = CKPT_DEFAULT.split("/")[-3]
 
-DATA_DIR_DEFAULT = "/data/home/ec2-user/data_cache/test_ai_tutor_04_10"
+DATA_DIR_DEFAULT = "/data/home/ec2-user/data_cache/app_speak_dataset_jp_v0/audio/"
 def compute_word_level_distance(seq1, seq2):
     # remove punctuation
     seq1 = seq1.replace(".", "").replace(",", "").replace("?", "").replace("!", "").replace(":", "").replace(";", "").replace("-", "").replace("'", "").replace('"', "")
@@ -54,7 +54,7 @@ def run_eval_subset(model, dataloader, subset):
     total_edit_distance = 0
     total_edit_distance_streaming = 0
     total_length = 0
-    results = {"filename": [], "actual": [], "streaming_prediction": [], "streaming_prediction_probs": []}
+    results = {"filename": [], "actual": [], "streaming_prediction": []}
     # TODO: Move this to lightning module"
     # Set model to eval mode
     model.eval()
@@ -97,20 +97,20 @@ def run_eval_subset(model, dataloader, subset):
             # print(hypos[0][0], end="", flush=True)
             
             # streaming_probs = [h[1] for h in hypos][:30]
-            # streaming_prediction = [h[0] for h in hypos][:30]
-            if sample_idx % 1 == 0:
+            streaming_prediction = [h[0] for h in hypos][:30]
+            if sample_idx % 500 == 0:
                 sys.stdout.write(f"\rPredicted: {predicted_transcript}")
                 sys.stdout.flush()
                 print(f"\t Actual: {actual}")
             # total_edit_distance += compute_word_level_distance(actual, predicted)
             # total_edit_distance_streaming += compute_word_level_distance(actual, streaming_prediction)
             # Pick the minimum edit distance
-            current_edit_distance = np.inf
-            for hyp in streaming_prediction:
-                current_edit_distance = min(compute_word_level_distance(actual, hyp), current_edit_distance)
-                if current_edit_distance == 0:
-                    break
-            total_edit_distance_streaming += current_edit_distance
+            # current_edit_distance = np.inf
+            # for hyp in streaming_prediction:
+            #     current_edit_distance = min(compute_word_level_distance(actual, hyp), current_edit_distance)
+            #     if current_edit_distance == 0:
+            #         break
+            # total_edit_distance_streaming += current_edit_distance
             results["filename"].append(filename[0])
             results["actual"].append(actual)
             # results["predicted"].append(predicted)
@@ -123,14 +123,14 @@ def run_eval_subset(model, dataloader, subset):
             #     df.to_csv(f"results_{subset}_streaming_{run_id}.csv")
             #     logger.info(f"Processed elem {sample_idx}; WER: {total_edit_distance_streaming / total_length}")
     # Save results to csv
-    # df = pd.DataFrame(results)
-    # df.to_csv(f"results_{subset}_streaming_{run_id}.csv")
+    df = pd.DataFrame(results)
+    df.to_csv(f"results_{subset}_streaming_{run_id}.csv")
     # logger.info(f"Final WER for {subset} set: {total_edit_distance_streaming / total_length}")
 
 
 def run_eval(model, device, args):
     dataloader = model.test_dataloader(csv_files = [args.dataset_path], data_dirs = [DATA_DIR_DEFAULT], batch_size=1)
-    run_eval_subset(model, dataloader, f"test_device_{device}")
+    run_eval_subset(model, dataloader, f"japan")
 
 
 def get_lightning_module(args):
@@ -148,7 +148,6 @@ def parse_args():
     parser.add_argument(
         "--checkpoint-path",
         type=pathlib.Path,
-        # default=pathlib.Path("/data/home/ec2-user/audio/examples/asr/emformer_rnnt/exp/checkpoints/epoch=116-step=53001.ckpt"),
         default=pathlib.Path(CKPT_DEFAULT),
         help="Path to checkpoint to use for evaluation.",
     )

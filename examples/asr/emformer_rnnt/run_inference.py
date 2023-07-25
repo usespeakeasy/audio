@@ -60,7 +60,7 @@ def run_eval(model, args):
 def get_lightning_module(args):
     return SpeakRNNTModule.load_from_checkpoint(
             args.checkpoint_path,
-            dataset_path=str(args.dataset_path),
+            data_path=str(args.dataset_path),
             sp_model_path=str(args.sp_model_path),
             global_stats_path=str(args.global_stats_path),
         )

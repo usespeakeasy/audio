@@ -41,7 +41,7 @@ def get_trainer(args):
         gradient_clip_val=args.gradient_clip_val,
         callbacks=callbacks,
         logger=WandbLogger(project="emformer_rnnt"),
-        accumulate_grad_batches=16,
+        accumulate_grad_batches=16 * int(8/args.gpus),
         
     )
 
@@ -50,12 +50,14 @@ def get_lightning_module(args):
     if args.checkpoint_path:
         return SpeakRNNTModule.load_from_checkpoint(
             args.checkpoint_path,
-            data_path=str(args.dataset_path),
+            data_path={"train": {"csv_files": [f"/data/home/ec2-user/raw_data/validated/{args.dataset_name}_train.csv"], "data_dir": [f"{args.datacache_dir}/{args.dataset_name}"]},
+                       "val": {"csv_files": [f"/data/home/ec2-user/raw_data/validated/{args.dataset_name}_val.csv"], "data_dir": [f"{args.datacache_dir}/{args.dataset_name}"]}},
             sp_model_path=str(args.sp_model_path),
             global_stats_path=str(args.global_stats_path),
         )
     return SpeakRNNTModule(
-            data_path=str(args.dataset_path),
+            data_path={"train": {"csv_files": [f"/data/home/ec2-user/raw_data/validated/{args.dataset_name}_train.csv"], "data_dir": [f"{args.datacache_dir}/{args.dataset_name}"]},
+                       "val": {"csv_files": [f"/data/home/ec2-user/raw_data/validated/{args.dataset_name}_val.csv"], "data_dir": [f"{args.datacache_dir}/{args.dataset_name}"]}},
             sp_model_path=str(args.sp_model_path),
             global_stats_path=str(args.global_stats_path),
         )
@@ -65,20 +67,26 @@ def parse_args():
     parser = ArgumentParser()
     parser.add_argument(
         "--global-stats-path",
-        default=pathlib.Path("examples/asr/emformer_rnnt/librispeech/global_stats.json"),
+        default=pathlib.Path("librispeech/global_stats.json"),
         type=pathlib.Path,
         help="Path to JSON file containing feature means and stddevs.",
     )
     parser.add_argument(
-        "--dataset-path",
+        "--datacache-dir",
         type=pathlib.Path,
-        default=pathlib.Path(""), # TODO: add path to dataset
-        help="Path to datasets.",
+        default=pathlib.Path("/data/home/ec2-user/data_cache"), 
+        help="Path to audio cache directory. (Default: 'data_cache')",
         required=False,
     )
     parser.add_argument(
+        "--dataset-name",
+        type=str,
+        help="Name of dataset to train on", # TODO: Add support for aggregation of multiple datasets
+        
+    )
+    parser.add_argument(
         "--sp-model-path",
-        default=pathlib.Path("examples/asr/emformer_rnnt/spm_bpe_4096_librispeech.model"),
+        default=pathlib.Path("spm_bpe_4096_librispeech.model"),
         type=pathlib.Path,
         help="Path to SentencePiece model.",
     )
@@ -96,13 +104,13 @@ def parse_args():
     )
     parser.add_argument(
         "--gpus",
-        default=4,
+        default=1,
         type=int,
         help="Number of GPUs per node to use for training. (Default: 4)",
     )
     parser.add_argument(
         "--epochs",
-        default=5,
+        default=4,
         type=int,
         help="Number of epochs to train for. (Default: 120)",
     )
