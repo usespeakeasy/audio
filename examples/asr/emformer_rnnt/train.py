@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import datetime
 import logging
+import os
 import pathlib
 from argparse import ArgumentParser
 from speak.lightning import SpeakRNNTModule
@@ -26,6 +27,7 @@ def get_trainer(args):
         save_top_k=5,
         save_weights_only=False,
         verbose=True,
+        every_n_train_steps=1000,
     )
     callbacks = [
         checkpoint,
@@ -37,27 +39,38 @@ def get_trainer(args):
         num_nodes=args.num_nodes,
         devices=args.gpus,
         accelerator="gpu",
-        strategy="ddp_find_unused_parameters_false",
+        strategy="ddp",
         gradient_clip_val=args.gradient_clip_val,
         callbacks=callbacks,
         logger=WandbLogger(project="emformer_rnnt"),
-        accumulate_grad_batches=16 * int(8/args.gpus),
+        accumulate_grad_batches=16,
+        limit_val_batches=0.2,
+        # overfit_batches=0.001,
         
     )
 
 
 def get_lightning_module(args):
+    # train_csv_folder = "/data/home/ec2-user/asr_data/validated_csv/train"
+    # val_csv_folder = "/data/home/ec2-user/asr_data/validated_csv/val"
+    # # List all 
+    # train_csv_files = [f"{train_csv_folder}/{file}" for file in os.listdir(train_csv_folder)]
+    val_csv_files = ["/data/home/ec2-user/asr_data/validated_csv/val/ko-KR_2023-07-24_val.csv"] # TODO: FIX nnumpy error while loading data
+    
+    train_csv_files = ["/data/home/ec2-user/asr_data/aggregated_csv/emformer_v1/train.csv"]
+    # val_csv_files = ["/data/home/ec2-user/asr_data/aggregated_csv/emformer_v1/val.csv"]
+    
     if args.checkpoint_path:
         return SpeakRNNTModule.load_from_checkpoint(
             args.checkpoint_path,
-            data_path={"train": {"csv_files": [f"/data/home/ec2-user/raw_data/validated/{args.dataset_name}_train.csv"], "data_dir": [f"{args.datacache_dir}/{args.dataset_name}"]},
-                       "val": {"csv_files": [f"/data/home/ec2-user/raw_data/validated/{args.dataset_name}_val.csv"], "data_dir": [f"{args.datacache_dir}/{args.dataset_name}"]}},
+            data_path={"train": {"csv_files": train_csv_files, "data_dir": args.datacache_dir},
+                       "val": {"csv_files": val_csv_files, "data_dir": args.datacache_dir}},
             sp_model_path=str(args.sp_model_path),
             global_stats_path=str(args.global_stats_path),
         )
     return SpeakRNNTModule(
-            data_path={"train": {"csv_files": [f"/data/home/ec2-user/raw_data/validated/{args.dataset_name}_train.csv"], "data_dir": [f"{args.datacache_dir}/{args.dataset_name}"]},
-                       "val": {"csv_files": [f"/data/home/ec2-user/raw_data/validated/{args.dataset_name}_val.csv"], "data_dir": [f"{args.datacache_dir}/{args.dataset_name}"]}},
+            data_path={"train": {"csv_files": train_csv_files, "data_dir": args.datacache_dir},
+                       "val": {"csv_files": val_csv_files, "data_dir": args.datacache_dir}},
             sp_model_path=str(args.sp_model_path),
             global_stats_path=str(args.global_stats_path),
         )
@@ -74,16 +87,16 @@ def parse_args():
     parser.add_argument(
         "--datacache-dir",
         type=pathlib.Path,
-        default=pathlib.Path("/data/home/ec2-user/data_cache"), 
-        help="Path to audio cache directory. (Default: 'data_cache')",
+        default=pathlib.Path("/data/home/ec2-user/audio_files"), 
+        help="Path to audio cache directory. (Default: 'audio_files')",
         required=False,
     )
-    parser.add_argument(
-        "--dataset-name",
-        type=str,
-        help="Name of dataset to train on", # TODO: Add support for aggregation of multiple datasets
+    # parser.add_argument(
+    #     "--dataset-name",
+    #     type=str,
+    #     help="Name of dataset to train on", # TODO: Add support for aggregation of multiple datasets via command line
         
-    )
+    # )
     parser.add_argument(
         "--sp-model-path",
         default=pathlib.Path("spm_bpe_4096_librispeech.model"),
@@ -104,13 +117,13 @@ def parse_args():
     )
     parser.add_argument(
         "--gpus",
-        default=1,
+        default=4,
         type=int,
         help="Number of GPUs per node to use for training. (Default: 4)",
     )
     parser.add_argument(
         "--epochs",
-        default=4,
+        default=10,
         type=int,
         help="Number of epochs to train for. (Default: 120)",
     )

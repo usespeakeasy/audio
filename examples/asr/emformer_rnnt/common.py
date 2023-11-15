@@ -37,6 +37,9 @@ def batch_by_token_count(idx_target_lengths, token_limit):
     # Don't pack more than MAX_BATCH_SIZE samples into a single batch
     # This is to avoid OOM errors
     for idx, target_length in idx_target_lengths:
+        if target_length > token_limit:
+            print("Skipping sample with length {} > {}".format(target_length, token_limit))
+            continue
         if len(current_batch) == MAX_BATCH_SIZE or current_token_count + target_length > token_limit:
             batches.append(current_batch)
             current_batch = [idx]

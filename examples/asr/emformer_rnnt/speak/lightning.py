@@ -22,7 +22,7 @@ from pytorch_lightning import LightningModule
 from torchaudio.models import emformer_rnnt_base, RNNTBeamSearch
 
 from speak_datasets.data_pytorch import AudioDataset
-MAX_TOKENS_PACKED = 512
+MAX_TOKENS_PACKED = 128
 
 class CustomDataset(torch.utils.data.Dataset):
     r"""Sort samples by target length and batch to max token count."""
@@ -204,10 +204,7 @@ class SpeakRNNTModule(LightningModule):
         return self._step(batch_tuple[0], batch_idx, "test")
 
     def train_dataloader(self):
-        print("Loading training dataset")
-        # csv_files = ["/data/home/ec2-user/raw_data/csv/clean/train_2021_clean.csv", "/data/home/ec2-user/raw_data/train_ai_tutor_cleaned_04_26.csv"]
-        # data_dir = ["/data/home/ec2-user/data_cache/train_2021", "/data/home/ec2-user/data_cache/train_ai_tutor_04_10"]
-        
+        print("Loading training dataset")        
         csv_files = self.data_path["train"]["csv_files"]
         data_dir = self.data_path["train"]["data_dir"]
         target_lengths, dataset = self.construct_dataset(csv_files, data_dir)
@@ -225,11 +222,11 @@ class SpeakRNNTModule(LightningModule):
     def construct_dataset(self, csv_files, data_dir):
         datasets = []
         target_lengths = []
-        for csv_file, data_dir in zip(csv_files, data_dir):
+        for csv_file in csv_files:
             ds = AudioDataset(data_csv=csv_file, data_dir=data_dir)
             datasets.append(ds)
-            transcripts = ds.data_df["text"].to_list()
-            target_lengths.extend([len(self.sp_model.encode_as_ids(t)) for t in transcripts])
+            transcripts = ds.data_df[ds.column_name].to_list()
+            target_lengths.extend([len(self.sp_model.encode_as_ids(t)) for t in transcripts if t is not None])
         if len(datasets) == 1:
             dataset = datasets[0]
         else:
@@ -238,8 +235,6 @@ class SpeakRNNTModule(LightningModule):
 
     def val_dataloader(self):
         print("Loading validation dataset")
-        # csv_files = ["/data/home/ec2-user/raw_data/csv/test_ai_tutor_04_10.csv"]
-        # data_dir = ["/data/home/ec2-user/data_cache/test_ai_tutor_04_10"]
         csv_files = self.data_path["val"]["csv_files"]
         data_dir = self.data_path["val"]["data_dir"]
 
@@ -256,10 +251,10 @@ class SpeakRNNTModule(LightningModule):
         )
         return dataloader
 
-    def test_dataloader(self, csv_files: List[str], data_dirs: List[str], batch_size=1):
+    def test_dataloader(self, csv_files: List[str], data_dirs: List[str], batch_size=1, shuffle=False):
         """Test dataloader. Returns a list of texts and a list of audio files."""
         # TODO: Packed sequence
         print("Loading test dataset")
         _, dataset = self.construct_dataset(csv_files, data_dirs)
-        return torch.utils.data.DataLoader(dataset, batch_size=batch_size, collate_fn=self._test_collate_fn, num_workers=8, shuffle=False)
+        return torch.utils.data.DataLoader(dataset, batch_size=batch_size, collate_fn=self._test_collate_fn, num_workers=8, shuffle=shuffle)
 

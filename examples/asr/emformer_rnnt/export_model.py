@@ -27,6 +27,8 @@ from torchaudio.transforms import MelSpectrogram
 from audio.torchaudio.models import Hypothesis, RNNTBeamSearch
 
 
+
+
 def get_hypo_tokens(hypo: Hypothesis) -> List[int]:
     return hypo[0]
 
@@ -117,6 +119,7 @@ def get_lightning_module(
 ):
     return SpeakRNNTModule.load_from_checkpoint(
         Path(checkpoint_path),
+        map_location="cpu",
         data_path=Path(""),
         sp_model_path=sp_model_path,
         global_stats_path=Path(global_stats_path),
@@ -177,13 +180,13 @@ class ModelWrapper(torch.nn.Module):
         if prev_hypo is None:
             if prev_state is not None:
                 hypotheses, state = self.decoder.infer(
-                    features, length, beam_width=10, state=prev_state
+                    features, length, beam_width=20, state=prev_state
                 )
             else:
-                hypotheses, state = self.decoder.infer(features, length, beam_width=10)
+                hypotheses, state = self.decoder.infer(features, length, beam_width=20)
         else:
             hypotheses, state = self.decoder.infer(
-                features, length, beam_width=10, state=prev_state, hypothesis=prev_hypo
+                features, length, beam_width=20, state=prev_state, hypothesis=prev_hypo
             )
 
         transcript, probs = post_process_hypos(hypotheses, self.tgt_dict)
@@ -230,6 +233,9 @@ def main():
         sp_model_path=args.sp_model_path,
         checkpoint_path=args.checkpoint_path,
     ).eval()
+
+    # Run inference on CPU, set cuda visible devices to -1
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     # Move model to CPU
     model = model.cpu()
     # save model before quantization
@@ -259,16 +265,16 @@ def main():
         optimized_model = optimize_for_mobile(scripted_model)
 
     # Save the model
-    optimized_model.save("quantised_scripted_vanilla" + args.output_path)
-    print("Saved model to: ", "quantised_scripted_vanilla" + args.output_path)
+    optimized_model.save("quantised_scripted_" + args.output_path)
+    print("Saved model to: ", "quantised_scripted_" + args.output_path)
     print(
         "Size of model in MB: ",
-        os.path.getsize("quantised_scripted_vanilla" + args.output_path) / 1e6,
+        os.path.getsize("quantised_scripted_" + args.output_path) / 1e6,
     )
 
     # Save for lite interpreter
     optimized_model._save_for_lite_interpreter(args.output_path)
-    print("Saved model to: ", args.output_path)
+    print("Saved model for lite interpreter to: ", args.output_path)
     print("Size of model in MB: ", os.path.getsize(args.output_path) / 1e6)
 
     checksum = get_checksum(args.output_path)
