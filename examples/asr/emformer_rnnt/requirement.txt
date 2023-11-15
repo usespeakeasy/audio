@@ -1,0 +1,14 @@
+torch
+lightning
+datasets
+wandb
+Sentencepiece
+ffmpeg-python
+librosa
+jupyter
+jiwer
+git+https://github.com/openai/whisper.git
+gantry
+jupyter-notebook
+matplotlib
+seaborn
