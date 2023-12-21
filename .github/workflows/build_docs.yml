@@ -8,14 +8,14 @@ name: Build documentation
 #    automating release doc deployment is tricky.
 #    There is no reliable way to know if there should have been a minor version bump.
 #
-on:
-  pull_request:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
-  schedule:
-    - cron: '0 0 * * *'
+# on:
+#   pull_request:
+#   push:
+#     branches:
+#       - main
+#   workflow_dispatch:
+#   schedule:
+#     - cron: '0 0 * * *'
 
 jobs:
   build:
